@@ -1,0 +1,12 @@
+import assert from 'node:assert/strict';
+import worker,{credentials} from '../deploy/standalone.mjs';
+const env={...credentials,BUCKET:{}};
+const req=(auth,identity)=>new Request('https://example.com/api/session',{headers:{...(auth?{Authorization:'Basic '+btoa(auth)}:{}),...(identity?{'oai-authenticated-user-id':identity}:{})}});
+assert.equal((await worker.fetch(req(null,'spoofed'),env)).status,401);
+assert.equal((await worker.fetch(req('admin:wrong'),env)).status,401);
+assert.equal((await worker.fetch(req('admin:'+env.LOGIN_PASSWORD),{})).status,503);
+const res=await worker.fetch(req('admin:'+env.LOGIN_PASSWORD,'spoofed'),env);
+assert.equal(res.status,200);
+const expected=Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',new TextEncoder().encode(credentials.DATA_OWNER_ID)))).map(x=>x.toString(16).padStart(2,'0')).join('');
+assert.equal((await res.json()).owner,expected);
+console.log('PASS: standalone authentication rejects missing/wrong passwords and replaces untrusted identity.');
